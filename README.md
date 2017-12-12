@@ -1,3 +1,7 @@
+# README not rewritted and project not finished.
+
+Author: Somefive
+
 # Quasar App
 
 > A Quasar project
