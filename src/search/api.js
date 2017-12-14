@@ -4,5 +4,6 @@ axios.defaults.headers.post['Content-Type'] = 'application/json'
 axios.defaults.timeout = 5000
 
 export default {
-  generalSearch: async (qs, skip, limit, analyzer, strict) => { return axios.post('/search/general', {qs, skip, limit, analyzer, strict}) }
+  generalSearch: async (qs, skip, limit, analyzer, strict) => { return axios.post('/search/general', {qs, skip, limit, analyzer, strict}) },
+  search: async (qs, skip, limit, analyzer) => { return axios.post('/search', {qs, skip, limit, analyzer}) }
 }

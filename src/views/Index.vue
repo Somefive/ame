@@ -11,8 +11,9 @@
           icon: 'delete',
           content: true,
           handler: clear
-        }]" :disabled="!searchAvailability" style="float: left; margin-right: 10px; min-width: 25%"/>
+        }]" :disabled="!searchAvailability" style="float: left; margin-right: 10px; min-width: 25%" @keyup.enter="generalSearch()"/>
         <q-btn outline @click="generalSearch()" small :disabled="qs.length === 0" style="margin: 16px 0"><q-icon name="search" style="margin-right: 5px; font-size: 18px"></q-icon>Go!</q-btn>
+        <q-btn outline round @click="advanceQuery.visibility = true" small style="margin: 0; transform: scale(0.7, 0.7)" icon="build"></q-btn>
       </div>
     </div>
     <div :class="['data-view', status]">
@@ -116,6 +117,27 @@
         </div>
       </q-modal-layout>
     </q-modal>
+    <q-modal v-model="advanceQuery.visibility" :content-css="{minWidth: '80vw', minHeight: '80vh'}">
+      <q-modal-layout>
+        <q-toolbar slot="header">
+          <q-btn flat @click="advanceQuery.visibility = false"><q-icon name="keyboard_arrow_left" /></q-btn>
+          <div class="q-toolbar-title">{{ lget(labels.advanceSearch) }}</div>
+        </q-toolbar>
+        <div class="layout-padding">
+          <q-field :label="lget(labels.title)"><q-input v-model="advanceQuery.values.title" /></q-field>
+          <q-field :label="lget(labels.abstract)"><q-input v-model="advanceQuery.values.abstract" /></q-field>
+          <q-field :label="lget(labels.topics)"><q-input v-model="advanceQuery.values.topics" /></q-field>
+          <q-field :label="lget(labels.keywords)"><q-input v-model="advanceQuery.values.keywords" /></q-field>
+          <q-field :label="lget(labels.authors)"><q-input v-model="advanceQuery.values.authors" /></q-field>
+          <q-field :label="lget(labels.src)"><q-input v-model="advanceQuery.values.src" /></q-field>
+          <q-field :label="lget(labels.publisher)"><q-input v-model="advanceQuery.values.publisher" /></q-field>
+          <q-field :label="lget(labels.publishDate)"><q-input v-model="advanceQuery.values.publishDate" /></q-field>
+          <q-field :label="lget(labels.org)"><q-input v-model="advanceQuery.values.org" /></q-field>
+          <q-field :label="lget(labels.year)"><q-input v-model="advanceQuery.values.year" /></q-field>
+          <q-btn color="primary" style="position: absolute; bottom: 30px; right: 30px;" @click="advanceSearch()">Go!</q-btn>
+        </div>
+      </q-modal-layout>
+    </q-modal>
   </div>
 </template>
 
@@ -136,7 +158,8 @@ import {
   QPopover,
   QList,
   QItem,
-  QInput
+  QInput,
+  QField
 } from 'quasar'
 import api from '../search/api.js'
 import _ from 'lodash'
@@ -159,14 +182,16 @@ export default {
     QPopover,
     QList,
     QItem,
-    QInput
+    QInput,
+    QField
   },
   computed: {
     analyzerColor () {
       switch (this.analyzer) {
         case 'IKAnalyzer': return 'positive'
         case 'StandardAnalyzer': return 'info'
-        default: return 'warning'
+        case 'JcsegAnalyzer': return 'warning'
+        default: return 'negative'
       }
     },
     pageNavigator () {
@@ -201,14 +226,31 @@ export default {
         count: 1,
         total: 0
       },
+      advanceQuery: {
+        visibility: false,
+        values: {
+          title: '',
+          abstract: '',
+          topics: '',
+          keywords: '',
+          authors: '',
+          src: '',
+          publisher: '',
+          publishDate: '',
+          org: '',
+          year: ''
+        }
+      },
       ...languagePackage
     }
   },
   methods: {
     updatePaging (total) {
+      if (total === 0) this.paging.skip = 0
       this.paging.total = total
       this.paging.count = Math.ceil(total / this.paging.limit)
       this.paging.page = Math.floor(this.paging.skip / this.paging.limit) + 1
+      this.inputs.targetPage = this.paging.page
     },
     goToPage (page) {
       page = Math.max(Math.min(page, this.paging.count), 1)
@@ -237,6 +279,22 @@ export default {
       }).catch(err => {
         console.error(err)
         this.searchAvailability = true
+        this.publications.splice(0, this.publications.length)
+        this.status = 'front'
+      })
+    },
+    search (query) {
+      this.updatePaging(0)
+      this.searchAvailability = false
+      api.search(query, this.paging.skip, this.paging.limit, this.analyzer).then(result => {
+        this.searchAvailability = true
+        this.updatePaging(result.data.total)
+        this.publications.splice(0, this.publications.length, ...result.data.data)
+        this.status = 'expand'
+      }).catch(err => {
+        console.error(err)
+        this.searchAvailability = true
+        this.publications.splice(0, this.publications.length)
         this.status = 'front'
       })
     },
@@ -244,7 +302,7 @@ export default {
       this.qs = ''
       this.publications.splice(0, this.publications.length)
       this.status = 'front'
-      this.paging.count = 0
+      this.updatePaging(0)
     },
     changeLang () {
       if (this.lang === 'zh') {
@@ -262,6 +320,12 @@ export default {
           this.analyzer = 'StandardAnalyzer'
           break
         case 'StandardAnalyzer':
+          this.analyzer = 'JcsegAnalyzer'
+          break
+        case 'JcsegAnalyzer':
+          this.analyzer = 'CJKAnalyzer'
+          break
+        case 'CJKAnalyzer':
           this.analyzer = 'IKAnalyzer'
           break
         default:
@@ -275,8 +339,22 @@ export default {
     lget_ (obj) {
       return _.isEmpty(obj[this.lang_default]) ? obj[this.lang] : obj[this.lang_default]
     },
-    inputPageNumber (e) {
-      console.log(e)
+    advanceSearch () {
+      this.advanceQuery.visibility = false
+      const fields = {
+        title: true, abstract: true, topics: false, keywords: true, authors: true, src: true, publisher: true, publishDate: false, org: true
+      }
+      let midResult = _.map(fields, (value, key) => { return this.advanceSearchGenerator(key, value) })
+      let year = this.advanceQuery.values.year
+      if (!_.isEmpty(year)) midResult.push(`(year:[${year} TO ${year}])`)
+      let query = midResult.filter(v => v.length > 0).join(this.strict ? ' AND ' : ' OR ')
+      if (_.isEmpty(query)) return
+      this.search(query)
+    },
+    advanceSearchGenerator (field, i18n) {
+      const subQuery = this.advanceQuery.values[field]
+      if (!_.isEmpty(subQuery)) return i18n ? `(${field}_zh:"${subQuery}" OR ${field}_en:"${subQuery}")` : `(${field}:"${subQuery}")`
+      else return ''
     }
   }
 }

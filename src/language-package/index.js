@@ -16,6 +16,7 @@ export default {
     volume: {zh: '期', en: 'Volume'},
     year: {zh: '年份', en: 'Year'},
     strictMode: {zh: '严格模式', en: 'Strict'},
-    looseMode: {zh: '松散模式', en: 'Loose'}
+    looseMode: {zh: '松散模式', en: 'Loose'},
+    advanceSearch: {zh: '高级搜索', en: 'Advance Search'}
   }
 }
