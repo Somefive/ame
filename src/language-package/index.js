@@ -14,6 +14,8 @@ export default {
     org: {zh: '所属单位', en: 'Organization'},
     table: {zh: '表名', en: 'Table'},
     volume: {zh: '期', en: 'Volume'},
-    year: {zh: '年份', en: 'Year'}
+    year: {zh: '年份', en: 'Year'},
+    strictMode: {zh: '严格模式', en: 'Strict'},
+    looseMode: {zh: '松散模式', en: 'Loose'}
   }
 }

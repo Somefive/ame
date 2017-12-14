@@ -58,6 +58,25 @@
     </div>
     <div class="tools">
       <q-btn rounded @click="changeLang" :color="lget(langTool)">{{lget(langText)}}</q-btn>
+      <q-btn rounded @click="changeAnalyzer" :color="analyzerColor">{{analyzer}}</q-btn>
+      <q-btn rounded @click="strict = !strict" :color="strict ? 'purple-5' : 'deep-purple-5'">{{strict ? lget(labels.strictMode) : lget(labels.looseMode)}}</q-btn>
+    </div>
+    <div class="paging" v-if="paging.total > 0">
+      <q-btn color="tertiary" class="left-arrow"><q-icon name="keyboard arrow left" @click="goToPreviousPage"/></q-btn>
+      <div class="page-cursor" style="display: inline-flex;position: relative;float: left;">
+        <q-btn color="tertiary" @click="changePageInputVisibility">
+          Page:&nbsp;<span v-show="!inputs.pageInputVisible" style="padding: 0 12px">{{paging.page}}</span>
+          <span v-show="inputs.pageInputVisible">
+            <!-- <input class="page-number-input" @click.stop @input.prevent="inputPageNumber" v-model="inputs.targetPage" placeholoder="Page Number"/> -->
+            <q-input @click.stop v-model="inputs.targetPage" style="padding: 0;margin: 0;width: 40px" align="center" color="white" :dark="true" type="number" @keyup.enter="goToPage(inputs.targetPage)"/>
+          </span>
+          &nbsp;/ {{paging.count}}
+        </q-btn>
+        <div class="popover">
+          <q-btn v-for="(n, index) in pageNavigator" :key="index" color="tertiary" @click="goToPage(n)">{{n}}</q-btn>
+        </div>
+      </div>
+      <q-btn color="tertiary" class="right-arrow"><q-icon name="keyboard arrow right" @click="goToNextPage"/></q-btn>
     </div>
     <q-modal v-model="detailModal" :content-css="{minWidth: '80vw', minHeight: '80vh'}">
       <q-modal-layout v-if="selectedPublication">
@@ -113,7 +132,11 @@ import {
   QTooltip,
   QModal,
   QModalLayout,
-  QToolbar
+  QToolbar,
+  QPopover,
+  QList,
+  QItem,
+  QInput
 } from 'quasar'
 import api from '../search/api.js'
 import _ from 'lodash'
@@ -132,9 +155,28 @@ export default {
     QTooltip,
     QModal,
     QModalLayout,
-    QToolbar
+    QToolbar,
+    QPopover,
+    QList,
+    QItem,
+    QInput
   },
   computed: {
+    analyzerColor () {
+      switch (this.analyzer) {
+        case 'IKAnalyzer': return 'positive'
+        case 'StandardAnalyzer': return 'info'
+        default: return 'warning'
+      }
+    },
+    pageNavigator () {
+      return _.filter(
+        _.sortedUniq(_.union(
+          _.range(1, 4),
+          _.range(this.paging.page - 2, this.paging.page + 3),
+          _.range(this.paging.count - 2, this.paging.count + 1)
+        )), i => (i > 0 && i <= this.paging.count))
+    }
   },
   data () {
     return {
@@ -146,16 +188,51 @@ export default {
       lang_default: 'en',
       detailModal: false,
       selectedPublication: null,
+      analyzer: 'IKAnalyzer',
+      strict: false,
+      inputs: {
+        targetPage: 1,
+        pageInputVisible: false
+      },
+      paging: {
+        skip: 0,
+        limit: 10,
+        page: 1,
+        count: 1,
+        total: 0
+      },
       ...languagePackage
     }
   },
   methods: {
+    updatePaging (total) {
+      this.paging.total = total
+      this.paging.count = Math.ceil(total / this.paging.limit)
+      this.paging.page = Math.floor(this.paging.skip / this.paging.limit) + 1
+    },
+    goToPage (page) {
+      page = Math.max(Math.min(page, this.paging.count), 1)
+      if (this.paging.page === page) return
+      this.paging.page = page
+      this.paging.skip = (page - 1) * this.paging.limit
+      this.generalSearch()
+    },
+    changePageInputVisibility () {
+      this.inputs.pageInputVisible = !this.inputs.pageInputVisible
+      this.inputs.targetPage = this.paging.page
+    },
+    goToPreviousPage () { this.goToPage(this.paging.page - 1) },
+    goToNextPage () { this.goToPage(this.paging.page + 1) },
     generalSearch (queryString = null) {
-      if (!_.isEmpty(queryString)) this.qs = queryString
+      if (!_.isEmpty(queryString)) {
+        this.qs = queryString
+        this.updatePaging(0)
+      }
       this.searchAvailability = false
-      api.generalSearch(this.qs, 0, 20).then(result => {
+      api.generalSearch(this.qs, this.paging.skip, this.paging.limit, this.analyzer, this.strict).then(result => {
         this.searchAvailability = true
-        this.publications.splice(0, this.publications.length, ...result.data)
+        this.updatePaging(result.data.total)
+        this.publications.splice(0, this.publications.length, ...result.data.data)
         this.status = 'expand'
       }).catch(err => {
         console.error(err)
@@ -167,6 +244,7 @@ export default {
       this.qs = ''
       this.publications.splice(0, this.publications.length)
       this.status = 'front'
+      this.paging.count = 0
     },
     changeLang () {
       if (this.lang === 'zh') {
@@ -178,11 +256,27 @@ export default {
         this.lang_default = 'en'
       }
     },
+    changeAnalyzer () {
+      switch (this.analyzer) {
+        case 'IKAnalyzer':
+          this.analyzer = 'StandardAnalyzer'
+          break
+        case 'StandardAnalyzer':
+          this.analyzer = 'IKAnalyzer'
+          break
+        default:
+          this.analyzer = 'IKAnalyzer'
+          break
+      }
+    },
     lget (obj) {
       return _.isEmpty(obj[this.lang]) ? obj[this.lang_default] : obj[this.lang]
     },
     lget_ (obj) {
       return _.isEmpty(obj[this.lang_default]) ? obj[this.lang] : obj[this.lang_default]
+    },
+    inputPageNumber (e) {
+      console.log(e)
     }
   }
 }
@@ -194,7 +288,8 @@ export default {
   width: 100%;
 }
 .index div, span {
-  transition: all 0.75s;
+  transition-property: width, height, background-color, font-size, transform, left, right, top, bottom; 
+  transition-duration: 0.75s;
 }
 .banner {
   background: linear-gradient(to top, rgba(133, 171, 247, 0), rgba(33, 42, 140, 0.5));
@@ -301,6 +396,45 @@ export default {
   position: fixed;
   bottom: 50px;
   right: 50px;
+  opacity: 0.8;
+}
+.tools:hover {
+  opacity: 1;
+}
+.paging {
+  position: fixed;
+  bottom: 50px;
+  left: 50px;
+  opacity: 0.8;
+  border-radius: 0;
+}
+.paging:hover {
+  opacity: 1;
+}
+.paging button {
+  float: left;
+}
+.paging .left-arrow {
+  border-radius: 25px 0 0 25px;
+}
+.paging .right-arrow {
+  border-radius: 0 25px 25px 0;
+}
+.paging .popover {
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+  transform: translate(0, -100%);
+}
+.paging .popover button {
+  width: 100%;
+}
+.paging .page-cursor > .popover {
+  visibility: hidden;
+}
+.paging .page-cursor:hover > .popover {
+  visibility: visible;
 }
 .language-helper div{
   margin: 0 5px;
@@ -335,6 +469,20 @@ export default {
   right: 10px;
   font-style: italic;
   opacity: 0.7;
+}
+.page-number-input {
+  padding: 0;
+  margin: 0;
+  float: left;
+  background: transparent;
+  border: 0;
+  outline: none;
+  text-align: center;
+  color: white;
+}
+.page-number-input:focus {
+  border: 0;
+  outline: none;
 }
 </style>
 
