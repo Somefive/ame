@@ -11,7 +11,12 @@
           icon: 'delete',
           content: true,
           handler: clear
-        }]" :disabled="!searchAvailability" style="float: left; margin-right: 10px; min-width: 25%" @keyup.enter="generalSearch()"/>
+        }]" :disabled="!searchAvailability" style="float: left; margin-right: 10px; min-width: 25%" @keyup.enter="generalSearch()">
+          <q-autocomplete
+            @search="suggest"
+            :min-characters="1"
+          />
+        </q-search>
         <q-btn outline @click="generalSearch()" small :disabled="qs.length === 0" style="margin: 16px 0"><q-icon name="search" style="margin-right: 5px; font-size: 18px"></q-icon>Go!</q-btn>
         <q-btn outline round @click="advanceQuery.visibility = true" small style="margin: 0; transform: scale(0.7, 0.7)" icon="build"></q-btn>
       </div>
@@ -159,7 +164,8 @@ import {
   QList,
   QItem,
   QInput,
-  QField
+  QField,
+  QAutocomplete
 } from 'quasar'
 import api from '../search/api.js'
 import _ from 'lodash'
@@ -183,7 +189,8 @@ export default {
     QList,
     QItem,
     QInput,
-    QField
+    QField,
+    QAutocomplete
   },
   computed: {
     analyzerColor () {
@@ -355,6 +362,19 @@ export default {
       const subQuery = this.advanceQuery.values[field]
       if (!_.isEmpty(subQuery)) return i18n ? `(${field}_zh:"${subQuery}" OR ${field}_en:"${subQuery}")` : `(${field}:"${subQuery}")`
       else return ''
+    },
+    suggest (terms, done) {
+      api.suggest(terms).then(result => {
+        done(result.data.map(word => {
+          return {
+            value: `${terms} ${word}`,
+            label: word
+          }
+        }))
+      }).catch(err => {
+        console.error(err)
+        done([])
+      })
     }
   }
 }
